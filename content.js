@@ -287,7 +287,25 @@ else if (window === window.top) {
             #url-bar { 
               flex-grow: 1; background: var(--url-bg, #e9e9e9); color: var(--url-color, #444); 
               padding: 4px 12px; border-radius: 6px; font-size: 12px; text-align: center; 
-              white-space: nowrap; overflow: hidden; text-overflow: ellipsis; user-select: none; transition: 0.4s;
+              white-space: nowrap; overflow: hidden; text-overflow: ellipsis; user-select: none; 
+              transition: padding-right 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+              min-width: 0;
+            }
+            #url-search-btn { 
+              width: 0; height: 20px; margin-left: 0; cursor: pointer; 
+              color: var(--url-color, #444); opacity: 0; 
+              transition: width 0.3s cubic-bezier(0.4, 0, 0.2, 1), 
+                          margin-left 0.3s cubic-bezier(0.4, 0, 0.2, 1), 
+                          opacity 0.25s ease 0.05s;
+              overflow: hidden; flex-shrink: 0; display: flex; align-items: center; justify-content: center;
+            }
+            #url-search-btn svg { width: 16px; height: 16px; flex-shrink: 0; }
+            #url-search-btn:hover { opacity: 1; }
+            #header:hover #url-search-btn { 
+              width: 20px; margin-left: 6px; opacity: 0.6; 
+            }
+            #header:hover #url-bar { 
+              padding-right: 4px; 
             }
             
             #iframe-container { flex-grow: 1; background: var(--iframe-bg, #ffffff); position: relative; overscroll-behavior: none; }
@@ -307,6 +325,9 @@ else if (window === window.top) {
                 <svg class="nav-btn forward" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="9 18 15 12 9 6"></polyline></svg>
               </div>
               <div id="url-bar">Loading...</div>
+              <div id="url-search-btn" title="Type custom URL">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
+              </div>
             </div>
             <div id="iframe-container">
               <div class="resize-handle"></div>
@@ -400,6 +421,8 @@ else if (window === window.top) {
           this.browser.classList.add('visible');
           this.isVisible = true;
           this.isClosing = false;
+          this.urlBar.contentEditable = false;
+          this.urlBar.blur();
         });
       }
 
@@ -415,6 +438,8 @@ else if (window === window.top) {
 
         this.isDragging = false;
         this.overlay.style.display = 'none';
+        this.urlBar.contentEditable = false;
+        this.urlBar.blur();
 
         this.isAnimatingSize = true;
         this.browser.classList.add('animating-size');
@@ -562,6 +587,44 @@ else if (window === window.top) {
           if (!this.isDraggingMotion) this.toggleMinimize();
         });
 
+        // Custom URL input via search button
+        const searchBtn = this.shadow.querySelector('#url-search-btn');
+        searchBtn.addEventListener('click', (e) => {
+          if (this.isDraggingMotion) return;
+          e.stopPropagation();
+          this.urlBar.contentEditable = true;
+          this.urlBar.focus();
+          const range = document.createRange();
+          range.selectNodeContents(this.urlBar);
+          const sel = window.getSelection();
+          sel.removeAllRanges();
+          sel.addRange(range);
+        });
+
+        this.urlBar.addEventListener('keydown', (e) => {
+          if (e.key === 'Enter') {
+            e.preventDefault();
+            let url = this.urlBar.textContent.trim();
+            if (!url) return;
+            if (!url.match(/^https?:\/\//i)) url = 'https://' + url;
+            this.url = url;
+            this.replaceIframe(url);
+            this.urlBar.contentEditable = false;
+            this.urlBar.blur();
+            try { this.urlBar.textContent = new URL(url).hostname; } catch { this.urlBar.textContent = url; }
+          }
+          if (e.key === 'Escape') {
+            this.urlBar.contentEditable = false;
+            this.urlBar.blur();
+            try { this.urlBar.textContent = new URL(this.url).hostname; } catch { this.urlBar.textContent = this.url; }
+          }
+        });
+
+        this.urlBar.addEventListener('blur', () => {
+          this.urlBar.contentEditable = false;
+          try { this.urlBar.textContent = new URL(this.url).hostname; } catch { this.urlBar.textContent = this.url; }
+        });
+
         this.header.addEventListener('dblclick', (e) => {
           if (settings.hp_bubble_trigger === 'dblclick_head' && !e.target.closest('.traffic-lights')) {
             this.isDragging = false; this.overlay.style.display = 'none';
@@ -571,6 +634,13 @@ else if (window === window.top) {
 
         this.browser.addEventListener('mouseenter', () => { if (this.isPinned && settings.hp_ghost) this.browser.classList.remove('ghost'); });
         this.browser.addEventListener('mouseleave', () => { if (this.isPinned && settings.hp_ghost && !this.isMinimized) this.browser.classList.add('ghost'); });
+
+        this.browser.addEventListener('click', (e) => {
+          if (!e.target.closest('#url-bar') && !e.target.closest('#url-search-btn')) {
+            this.urlBar.contentEditable = false;
+            this.urlBar.blur();
+          }
+        });
 
         new ResizeObserver(() => {
           if (!this.isVisible || this.isMinimized || this.isSnapped || this.isAnimatingSize) return;
