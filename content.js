@@ -350,6 +350,9 @@ else if (window === window.top) {
         this.isDraggingMotion = false;
         this.isResizingEdge = false;
 
+        this.historyStack = [];
+        this.historyIndex = -1;
+
         this.setupListeners();
       }
 
@@ -375,10 +378,34 @@ else if (window === window.top) {
         this.iframe = freshIframe;
       }
 
+      navigateTo(url, addToHistory = true) {
+        if (url.startsWith('http://')) url = url.replace(/^http:\/\//i, 'https://');
+
+        if (addToHistory) {
+          // Remove any forward history if we're not at the end
+          if (this.historyIndex < this.historyStack.length - 1) {
+            this.historyStack = this.historyStack.slice(0, this.historyIndex + 1);
+          }
+          this.historyStack.push(url);
+          this.historyIndex++;
+        }
+
+        this.url = url;
+        this.replaceIframe(url);
+        try { this.urlBar.textContent = new URL(url).hostname; } catch { this.urlBar.textContent = url; }
+      }
+
       preload(url, mouseX, mouseY) {
         if (this.url === url && this.isVisible && !this.isClosing) return;
 
         const wasVisible = this.isVisible;
+
+        // Initialize history on first preload
+        if (this.historyStack.length === 0) {
+          this.historyStack.push(url);
+          this.historyIndex = 0;
+        }
+
         this.url = url;
         try { this.urlBar.textContent = new URL(url).hostname; } catch { this.urlBar.textContent = url; }
 
@@ -580,8 +607,18 @@ else if (window === window.top) {
           else this.browser.classList.remove('ghost');
         });
 
-        this.shadow.querySelector('.back').addEventListener('click', () => this.securePostToIframe({ gopeak: 'goBack' }));
-        this.shadow.querySelector('.forward').addEventListener('click', () => this.securePostToIframe({ gopeak: 'goForward' }));
+        this.shadow.querySelector('.back').addEventListener('click', () => {
+          if (this.historyIndex > 0) {
+            this.historyIndex--;
+            this.navigateTo(this.historyStack[this.historyIndex], false);
+          }
+        });
+        this.shadow.querySelector('.forward').addEventListener('click', () => {
+          if (this.historyIndex < this.historyStack.length - 1) {
+            this.historyIndex++;
+            this.navigateTo(this.historyStack[this.historyIndex], false);
+          }
+        });
 
         this.bubble.addEventListener('click', () => {
           if (!this.isDraggingMotion) this.toggleMinimize();
@@ -607,11 +644,9 @@ else if (window === window.top) {
             let url = this.urlBar.textContent.trim();
             if (!url) return;
             if (!url.match(/^https?:\/\//i)) url = 'https://' + url;
-            this.url = url;
-            this.replaceIframe(url);
+            this.navigateTo(url);
             this.urlBar.contentEditable = false;
             this.urlBar.blur();
-            try { this.urlBar.textContent = new URL(url).hostname; } catch { this.urlBar.textContent = url; }
           }
           if (e.key === 'Escape') {
             this.urlBar.contentEditable = false;
@@ -759,9 +794,7 @@ else if (window === window.top) {
 
       if (event.data.gopeak === 'navigate') {
         // Recreate iframe with new URL to avoid cross-origin navigation blocking
-        targetWin.url = event.data.url;
-        targetWin.replaceIframe(event.data.url);
-        try { targetWin.urlBar.textContent = new URL(event.data.url).hostname; } catch { }
+        targetWin.navigateTo(event.data.url);
         return;
       }
 
