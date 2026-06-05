@@ -630,6 +630,7 @@ else if (window === window.top) {
           if (this.isDraggingMotion) return;
           e.stopPropagation();
           this.urlBar.contentEditable = true;
+          this.urlBar.textContent = this.url || '';
           this.urlBar.focus();
           const range = document.createRange();
           range.selectNodeContents(this.urlBar);
