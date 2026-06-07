@@ -162,7 +162,7 @@ else if (window === window.top) {
       hp_width: 768, hp_height: 529, hp_autohide: false, hp_theme: true,
       hp_ghost: false, hp_multipeak: false,
       hp_search: false, hp_modifier: 'Shift', hp_sidebar_mode: 'split', hp_bubble_trigger: 'dblclick_head',
-      hp_allow_bubble: true, hp_scroll: false, hp_preloader: true
+      hp_allow_bubble: true, hp_scroll: false, hp_preloader: false
     };
 
     chrome.storage.local.get(settings, (data) => { settings = data; });

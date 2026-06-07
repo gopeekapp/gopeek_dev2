@@ -3,7 +3,7 @@ const DEFAULT_SETTINGS = {
   hp_ghost: false, hp_multipeak: false,
   hp_search: false, hp_modifier: 'Shift', hp_sidebar_mode: 'split', 
   hp_bubble_trigger: 'dblclick_head', hp_allow_bubble: true, hp_scroll: false,
-  hp_preloader: true
+  hp_preloader: false
 };
 
 const elements = {
