@@ -174,6 +174,14 @@ else if (window === window.top) {
     let intentTimer = null;
     let activeHoverLink = null;
 
+    // THEME CACHE: In-memory sync cache so themes apply instantly without storage async gap
+    const themeCache = new Map();
+    chrome.storage.local.get(null, (items) => {
+      for (const [key, value] of Object.entries(items)) {
+        if (key.startsWith('gopeak_theme_')) themeCache.set(key, value);
+      }
+    });
+
     function prefetchUrl(url) {
       if (document.querySelector(`link[rel="prefetch"][href="${url}"]`)) return;
       const link = document.createElement('link');
@@ -234,7 +242,7 @@ else if (window === window.top) {
             #mini-browser.visible { opacity: 1; transform: translate3d(0, 0, 0) scale(1); pointer-events: auto; }
             #mini-browser.ghost { opacity: 0.3 !important; transition: opacity 0.4s ease; }
             #mini-browser:hover { opacity: 1 !important; }
-            
+
             #mini-browser.animating-size {
               transition: opacity 0.2s ease-out, transform 0.2s ease-out, border-radius 0.3s, width 0.25s cubic-bezier(0.4, 0, 0.2, 1), height 0.25s cubic-bezier(0.4, 0, 0.2, 1), left 0.2s cubic-bezier(0.4, 0, 0.2, 1), top 0.2s cubic-bezier(0.4, 0, 0.2, 1) !important;
             }
@@ -254,7 +262,7 @@ else if (window === window.top) {
               box-shadow: 0 10px 20px rgba(0,0,0,0.3);
             }
             #mini-browser.minimized #header, #mini-browser.minimized #iframe-container { display: none !important; }
-            
+
             #bubble-icon { 
               display: none; width: 100%; height: 100%; background-color: #fff; border-radius: 50%;
               justify-content: center; align-items: center; overflow: hidden; border: 2px solid #e9e9e9; box-sizing: border-box;
@@ -305,7 +313,7 @@ else if (window === window.top) {
             #header:hover #url-bar { 
               padding-right: 4px; 
             }
-            
+
             #iframe-container { flex-grow: 1; background: var(--iframe-bg, #ffffff); position: relative; overscroll-behavior: none; }
             iframe { width: 100%; height: 100%; border: none; background: transparent; }
             #drag-overlay { position: absolute; inset: 0; z-index: 10; display: none; background: transparent; }
@@ -409,6 +417,46 @@ else if (window === window.top) {
         this.preloader.classList.remove('active');
       }
 
+      // THEME CACHE: Apply a theme payload synchronously to the window chrome.
+      _applyThemeData(cached) {
+        this.header.style.setProperty('--header-bg', cached.color);
+        this.browser.style.setProperty('--iframe-bg', cached.pageBg);
+        const rgb = parseInt(cached.color.replace('#', ''), 16);
+        const luma = 0.2126 * ((rgb >> 16) & 0xff) + 0.7152 * ((rgb >> 8) & 0xff) + 0.0722 * ((rgb >> 0) & 0xff);
+        if (cached.isDark || luma < 128) {
+          this.header.style.setProperty('--url-bg', 'rgba(255, 255, 255, 0.15)');
+          this.header.style.setProperty('--url-color', '#fdfdfd');
+        } else {
+          this.header.style.setProperty('--url-bg', 'rgba(0, 0, 0, 0.05)');
+          this.header.style.setProperty('--url-color', '#444444');
+        }
+      }
+
+      // THEME CACHE: Pull last-known colors from the in-memory cache first (zero latency).
+      // Falls back to storage only on a cold start, then warms the memory cache.
+      applyCachedTheme(url) {
+        if (!settings.hp_theme) return false;
+        try {
+          const hostname = new URL(url).hostname;
+          const cacheKey = 'gopeak_theme_' + hostname;
+          const cached = themeCache.get(cacheKey);
+          if (cached) {
+            this._applyThemeData(cached);
+            return true;
+          }
+          // Async fallback for when memory cache hasn't warmed yet
+          chrome.storage.local.get(cacheKey, (data) => {
+            if (!this.host || !this.host.parentNode) return; // Window was closed while we waited
+            const fromStorage = data[cacheKey];
+            if (fromStorage) {
+              themeCache.set(cacheKey, fromStorage);
+              this._applyThemeData(fromStorage);
+            }
+          });
+        } catch (e) {}
+        return false;
+      }
+
       navigateTo(url, addToHistory = true) {
         if (url.startsWith('http://')) url = url.replace(/^http:\/\//i, 'https://');
 
@@ -422,6 +470,7 @@ else if (window === window.top) {
         }
 
         this.url = url;
+        this.applyCachedTheme(url); // THEME CACHE: instant recall before iframe loads
         this.replaceIframe(url);
         try { this.urlBar.textContent = new URL(url).hostname; } catch { this.urlBar.textContent = url; }
       }
@@ -440,12 +489,9 @@ else if (window === window.top) {
         this.url = url;
         try { this.urlBar.textContent = new URL(url).hostname; } catch { this.urlBar.textContent = url; }
 
-        if (!wasVisible) {
-          this.header.style.removeProperty('--header-bg');
-          this.header.style.removeProperty('--url-bg');
-          this.header.style.removeProperty('--url-color');
-          this.browser.style.removeProperty('--iframe-bg');
-        }
+        // THEME CACHE: Apply instantly from memory; if no cache, CSS defaults shine through.
+        // We no longer strip custom properties here — that was causing the white flash.
+        this.applyCachedTheme(url);
 
         if (!this.isPinned && !this.isSnapped) {
           let w = settings.hp_width; let h = settings.hp_height;
@@ -849,6 +895,22 @@ else if (window === window.top) {
             targetWin.header.style.setProperty('--url-color', '#444444');
           }
         }
+
+        // THEME CACHE: Persist the latest theme so the next peek is instant.
+        // The MutationObserver in the iframe already catches live site changes,
+        // so this overwrites the cache with the newest palette automatically.
+        try {
+          const hostname = new URL(event.data.url).hostname;
+          const cacheKey = 'gopeak_theme_' + hostname;
+          const themeData = {
+            color: event.data.color,
+            pageBg: event.data.pageBg,
+            isDark: event.data.isDark,
+            timestamp: Date.now()
+          };
+          themeCache.set(cacheKey, themeData); // sync memory update
+          chrome.storage.local.set({ [cacheKey]: themeData });
+        } catch (e) {}
       }
     });
 
