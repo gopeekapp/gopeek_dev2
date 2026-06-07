@@ -1,5 +1,3 @@
-
-
 // ==========================================
 // 1. IFRAME CONTEXT (Inside the mini-browser)
 // ==========================================
@@ -164,7 +162,7 @@ else if (window === window.top) {
       hp_width: 768, hp_height: 529, hp_autohide: false, hp_theme: true,
       hp_ghost: false, hp_multipeak: false,
       hp_search: false, hp_modifier: 'Shift', hp_sidebar_mode: 'split', hp_bubble_trigger: 'dblclick_head',
-      hp_allow_bubble: true, hp_scroll: false
+      hp_allow_bubble: true, hp_scroll: false, hp_preloader: true
     };
 
     chrome.storage.local.get(settings, (data) => { settings = data; });
@@ -311,6 +309,23 @@ else if (window === window.top) {
             #iframe-container { flex-grow: 1; background: var(--iframe-bg, #ffffff); position: relative; overscroll-behavior: none; }
             iframe { width: 100%; height: 100%; border: none; background: transparent; }
             #drag-overlay { position: absolute; inset: 0; z-index: 10; display: none; background: transparent; }
+
+            .gopeak-preloader {
+              position: absolute; inset: 0; z-index: 5;
+              display: none; align-items: center; justify-content: center;
+              background: var(--iframe-bg, #ffffff); pointer-events: none;
+            }
+            .gopeak-preloader.active { display: flex !important; }
+            .gopeak-preloader .dot {
+              width: 8px; height: 8px; background: #087AFF; border-radius: 50%;
+              margin: 0 3px; animation: gopeak-bounce 1.4s infinite ease-in-out both;
+            }
+            .gopeak-preloader .dot:nth-child(1) { animation-delay: -0.32s; }
+            .gopeak-preloader .dot:nth-child(2) { animation-delay: -0.16s; }
+            @keyframes gopeak-bounce {
+              0%, 80%, 100% { transform: scale(0); }
+              40% { transform: scale(1); }
+            }
           </style>
           <div id="mini-browser">
             <div id="bubble-icon"><img src="" /></div>
@@ -332,6 +347,11 @@ else if (window === window.top) {
             <div id="iframe-container">
               <div class="resize-handle"></div>
               <div id="drag-overlay"></div>
+              <div id="preloader" class="gopeak-preloader">
+                <div class="dot"></div>
+                <div class="dot"></div>
+                <div class="dot"></div>
+              </div>
               <iframe id="content-frame" name="${this.id}"></iframe>
             </div>
           </div>
@@ -345,6 +365,7 @@ else if (window === window.top) {
         this.bubble = this.shadow.querySelector('#bubble-icon');
         this.bubbleImg = this.bubble.querySelector('img');
         this.resizeHandle = this.shadow.querySelector('.resize-handle');
+        this.preloader = this.shadow.querySelector('#preloader');
 
         this.isDragging = false;
         this.isDraggingMotion = false;
@@ -376,6 +397,16 @@ else if (window === window.top) {
 
         this.iframe.replaceWith(freshIframe);
         this.iframe = freshIframe;
+        this.showPreloader();
+      }
+
+      showPreloader() {
+        if (!settings.hp_preloader) return;
+        this.preloader.classList.add('active');
+      }
+
+      hidePreloader() {
+        this.preloader.classList.remove('active');
       }
 
       navigateTo(url, addToHistory = true) {
@@ -800,6 +831,7 @@ else if (window === window.top) {
       }
 
       if (event.data.gopeak === 'themeAndUrl') {
+        targetWin.hidePreloader();
         if (event.data.url !== targetWin.url) {
           targetWin.url = event.data.url;
           try { targetWin.urlBar.textContent = new URL(targetWin.url).hostname; } catch { }

@@ -1,10 +1,9 @@
-
-
 const DEFAULT_SETTINGS = {
   hp_width: 768, hp_height: 529, hp_autohide: false, hp_theme: true,
   hp_ghost: false, hp_multipeak: false,
   hp_search: false, hp_modifier: 'Shift', hp_sidebar_mode: 'split', 
-  hp_bubble_trigger: 'dblclick_head', hp_allow_bubble: true, hp_scroll: false
+  hp_bubble_trigger: 'dblclick_head', hp_allow_bubble: true, hp_scroll: false,
+  hp_preloader: true
 };
 
 const elements = {
@@ -17,7 +16,7 @@ const elements = {
   bubbleTrigger: document.getElementById('bubbleTrigger')
 };
 
-const toggles = ['hp_autohide', 'hp_theme', 'hp_ghost', 'hp_multipeak', 'hp_search', 'hp_allow_bubble', 'hp_scroll'];
+const toggles = ['hp_autohide', 'hp_theme', 'hp_ghost', 'hp_multipeak', 'hp_search', 'hp_allow_bubble', 'hp_scroll', 'hp_preloader'];
 
 chrome.storage.local.get(DEFAULT_SETTINGS, (data) => {
   elements.wInput.value = data.hp_width;
