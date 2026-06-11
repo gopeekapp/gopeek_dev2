@@ -333,12 +333,29 @@
     <div class="section-title">Features</div>
     <div class="card">
         <div class="toggle-row">
-            <div><label>Enable Bubbles</label><span class="desc">Minimize windows to bubbles</span></div>
-            <label class="switch"><input type="checkbox" id="hp_allow_bubble"><span class="slider"></span></label>
-        </div>
-        <div class="toggle-row">
             <div><label>Show Preloader</label><span class="desc">Three-dot loader while page loads</span></div>
             <label class="switch"><input type="checkbox" id="hp_preloader"><span class="slider"></span></label>
+        </div>
+        <div class="toggle-row">
+            <div><label>Long Press</label><span class="desc">Hold-click links to peek</span></div>
+            <label class="switch"><input type="checkbox" id="hp_longpress"><span class="slider"></span></label>
+        </div>
+        <div class="setting-group" id="longpressDurationGroup" style="display: none;">
+            <div class="label-row">
+                <label>Press Duration</label>
+                <select id="longpressDuration">
+                    <option value="300">300 ms</option>
+                    <option value="400">400 ms</option>
+                    <option value="500">500 ms</option>
+                    <option value="600">600 ms</option>
+                    <option value="800">800 ms</option>
+                    <option value="1000">1000 ms</option>
+                </select>
+            </div>
+        </div>
+        <div class="toggle-row">
+            <div><label>Enable Bubbles</label><span class="desc">Minimize windows to bubbles</span></div>
+            <label class="switch"><input type="checkbox" id="hp_allow_bubble"><span class="slider"></span></label>
         </div>
         <div class="toggle-row">
             <div><label>Auto-hide Header</label><span class="desc">Retract top bar when scrolling</span></div>
@@ -357,7 +374,7 @@
             <label class="switch"><input type="checkbox" id="hp_ghost"><span class="slider"></span></label>
         </div>
         <div class="toggle-row">
-            <div><label>Multi-Peak</label><span class="desc">Allow multiple open windows</span></div>
+            <div><label>Multi-Peek</label><span class="desc">Allow multiple open windows</span></div>
             <label class="switch"><input type="checkbox" id="hp_multipeak"><span class="slider"></span></label>
         </div>
         <div class="toggle-row">

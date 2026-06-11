@@ -162,7 +162,8 @@ else if (window === window.top) {
       hp_width: 768, hp_height: 529, hp_autohide: false, hp_theme: true,
       hp_ghost: false, hp_multipeak: false,
       hp_search: false, hp_modifier: 'Shift', hp_sidebar_mode: 'split', hp_bubble_trigger: 'dblclick_head',
-      hp_allow_bubble: true, hp_scroll: false, hp_preloader: false
+      hp_allow_bubble: true, hp_scroll: false, hp_preloader: true, hp_longpress: false,
+      hp_longpress_duration: 300
     };
 
     chrome.storage.local.get(settings, (data) => { settings = data; });
@@ -173,6 +174,15 @@ else if (window === window.top) {
     let activeWindows = [];
     let intentTimer = null;
     let activeHoverLink = null;
+
+    // Long-press state
+    let longPressTimer = null;
+    let longPressStartX = 0;
+    let longPressStartY = 0;
+    let longPressLink = null;
+    let longPressTriggered = false;
+    let longPressHasMoved = false;
+    const LONG_PRESS_MOVE_THRESHOLD = 6; // px — cancel if user slides/drags the link
 
     // THEME CACHE: In-memory sync cache so themes apply instantly without storage async gap
     const themeCache = new Map();
@@ -870,6 +880,9 @@ else if (window === window.top) {
 
       if (event.data.gopeak === 'hideHeader' && settings.hp_autohide) targetWin.browser.classList.add('header-hidden');
 
+      // FIX: Show header again when scrolling up
+      if (event.data.gopeak === 'showHeader' && settings.hp_autohide) targetWin.browser.classList.remove('header-hidden');
+
       if (event.data.gopeak === 'navigate') {
         // Recreate iframe with new URL to avoid cross-origin navigation blocking
         targetWin.navigateTo(event.data.url);
@@ -962,7 +975,94 @@ else if (window === window.top) {
       }
     });
 
+    // Consolidated mousedown: close unpinned windows + start long-press
+    document.addEventListener('mousedown', (e) => {
+      // Close unpinned peek windows when clicking outside
+      const isOutsideAll = !activeWindows.some(w => w.host.contains(e.target));
+      if (isOutsideAll) activeWindows.forEach(win => { if (!win.isPinned && !win.isClosing) win.close(); });
+
+      // LONG-PRESS TRIGGER
+      if (settings.hp_longpress && e.button === 0) {
+        const link = e.target.closest('a');
+        if (link && link.href) {
+          const href = link.href;
+          const mx = e.clientX;
+          const my = e.clientY;
+          longPressLink = link;
+          longPressStartX = mx;
+          longPressStartY = my;
+          longPressTriggered = false;
+          longPressHasMoved = false;
+
+          longPressTimer = setTimeout(() => {
+            // Extra guard: if the user slid/dragged the link, abort even if timer fired
+            if (longPressHasMoved) return;
+            longPressTimer = null;
+            longPressTriggered = true;
+
+            chrome.runtime.sendMessage({ action: "enable_bypass" }, () => {
+              prefetchUrl(href);
+              let targetWin = activeWindows.find(w => !w.isPinned && !w.isClosing);
+              if (!targetWin) {
+                if (!settings.hp_multipeak && activeWindows.filter(w => !w.isClosing).length > 0) {
+                  targetWin = activeWindows.find(w => !w.isClosing);
+                } else {
+                  targetWin = new GoPeakWindow();
+                  activeWindows.push(targetWin);
+                }
+              }
+              targetWin.preload(href, mx, my);
+              targetWin.show();
+            });
+          }, settings.hp_longpress_duration);
+        }
+      }
+    });
+
+    // Cancel long-press if the mouse moves while held (e.g., sliding link to new tab)
+    document.addEventListener('mousemove', (e) => {
+      if (!longPressTimer) return;
+      const dx = Math.abs(e.clientX - longPressStartX);
+      const dy = Math.abs(e.clientY - longPressStartY);
+      if (dx > LONG_PRESS_MOVE_THRESHOLD || dy > LONG_PRESS_MOVE_THRESHOLD) {
+        longPressHasMoved = true;
+        clearTimeout(longPressTimer);
+        longPressTimer = null;
+        longPressLink = null;
+      }
+    });
+
+    // Cancel long-press if the browser initiates a drag operation (drag link to tab bar, etc.)
+    document.addEventListener('dragstart', (e) => {
+      if (longPressTimer) {
+        longPressHasMoved = true;
+        clearTimeout(longPressTimer);
+        longPressTimer = null;
+        longPressLink = null;
+      }
+    });
+
     document.addEventListener('mouseup', (e) => {
+      // Cancel long-press if released before timer fires
+      if (longPressTimer) {
+        clearTimeout(longPressTimer);
+        longPressTimer = null;
+        longPressLink = null;
+        longPressHasMoved = false;
+      }
+
+      // If long press fired, suppress the upcoming click so the page doesn't navigate,
+      // and skip search-selection logic this time.
+      if (longPressTriggered) {
+        setTimeout(() => {
+          longPressTriggered = false;
+          longPressLink = null;
+          longPressHasMoved = false;
+        }, 0);
+        return;
+      }
+
+      // Search Selection trigger
       if (!settings.hp_search || !checkModifier(e)) return;
       const selection = window.getSelection().toString().trim();
       if (selection) {
@@ -986,10 +1086,17 @@ else if (window === window.top) {
       }
     });
 
-    document.addEventListener('mousedown', (e) => {
-      const isOutsideAll = !activeWindows.some(w => w.host.contains(e.target));
-      if (isOutsideAll) activeWindows.forEach(win => { if (!win.isPinned && !win.isClosing) win.close(); });
-    });
+    // Prevent the normal click navigation after a successful long-press peek
+    document.addEventListener('click', (e) => {
+      if (longPressTriggered && !longPressHasMoved && e.target.closest('a') === longPressLink) {
+        longPressTriggered = false;
+        longPressLink = null;
+        longPressHasMoved = false;
+        e.preventDefault();
+        e.stopPropagation();
+        return false;
+      }
+    }, true);
 
     document.addEventListener('dblclick', (e) => {
       if (settings.hp_bubble_trigger === 'dblclick_out' && settings.hp_allow_bubble) {
